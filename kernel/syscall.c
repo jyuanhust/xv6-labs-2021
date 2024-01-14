@@ -56,7 +56,7 @@ argraw(int n)
 // Fetch the nth 32-bit system call argument.
 int
 argint(int n, int *ip)
-{
+{ 
   *ip = argraw(n);
   return 0;
 }
