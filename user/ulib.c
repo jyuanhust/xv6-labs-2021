@@ -103,7 +103,7 @@ memmove(void *vdst, const void *vsrc, int n)
 
   dst = vdst;
   src = vsrc;
-  if (src > dst) {
+  if (src > dst) {  // 这两个地址的比较有什么意义？防止拷贝覆盖么？
     while(n-- > 0)
       *dst++ = *src++;
   } else {

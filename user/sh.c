@@ -79,7 +79,7 @@ runcmd(struct cmd* cmd)
     fprintf(2, "exec %s failed\n", ecmd->argv[0]);
     break;
 
-  case REDIR:
+  case REDIR:  // 重定向
     rcmd = (struct redircmd*)cmd;
     close(rcmd->fd);
     if (open(rcmd->file, rcmd->mode) < 0) {
@@ -102,22 +102,22 @@ runcmd(struct cmd* cmd)
     if (pipe(p) < 0)
       panic("pipe");
     if (fork1() == 0) {
-      close(1);
+      close(1);  // 子进程
       dup(p[1]);
       close(p[0]);
       close(p[1]);
-      runcmd(pcmd->left);
+      runcmd(pcmd->left);  // 输出到管道，
     }
     if (fork1() == 0) {
-      close(0);
+      close(0);  // 子子进程
       dup(p[0]);
       close(p[0]);
       close(p[1]);
-      runcmd(pcmd->right);
+      runcmd(pcmd->right);  // 从管道读取
     }
     close(p[0]);
     close(p[1]);
-    wait(0);
+    wait(0);  // 从这里可以看出，假如存在多个子进程的情况下，父进程要等待他们返回，就得有多少个wait
     wait(0);
     break;
 
@@ -132,10 +132,10 @@ runcmd(struct cmd* cmd)
 
 int
 getcmd(char* buf, int nbuf)
-{
+{ // nbuf为buf含有的字节数，即空间大小
   fprintf(2, "$ ");
   memset(buf, 0, nbuf);
-  gets(buf, nbuf);
+  gets(buf, nbuf); // 从标准输入（fd=0）中读取字符串（去掉最后的换行或回车）
   if (buf[0] == 0) // EOF
     return -1;
   return 0;
@@ -144,11 +144,11 @@ getcmd(char* buf, int nbuf)
 int
 main(void)
 {
-  static char buf[100];
+  static char buf[100];  // 保存命令
   int fd;
 
-  // Ensure that three file descriptors are open.
-  while ((fd = open("console", O_RDWR)) >= 0) {
+  // Ensure that three file descriptors are open. // open的实现在哪里，为什么能传入一个console
+  while ((fd = open("console", O_RDWR)) >= 0) {  // printf发现这个console的fd是3，然后进入if中了
     if (fd >= 3) {
       close(fd);
       break;
@@ -157,9 +157,9 @@ main(void)
 
   // Read and run input commands.
   while (getcmd(buf, sizeof(buf)) >= 0) {
-    if (buf[0] == 'c' && buf[1] == 'd' && buf[2] == ' ') {
-      // Chdir must be called by the parent, not the child.
-      buf[strlen(buf) - 1] = 0;  // chop \n
+    if (buf[0] == 'c' && buf[1] == 'd' && buf[2] == ' ') {  // 这个if判断条件表示是cd命令
+      // Chdir must be called by the parent, not the child. 
+      buf[strlen(buf) - 1] = 0;  // chop \n 这里没必要吧，在getcmd已经去掉\n，将其变为0了
       if (chdir(buf + 3) < 0)
         fprintf(2, "cannot cd %s\n", buf + 3);
       continue;

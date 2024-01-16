@@ -196,6 +196,7 @@ UPROGS=\
 	$U/_sleep\
 	$U/_pingpong\
 	$U/_fork\
+	$U/_forktest_hjy\
 
 
 

@@ -67,7 +67,7 @@ sys_sleep(void)
       release(&tickslock);
       return -1;
     }
-    sleep(&ticks, &tickslock);
+    sleep(&ticks, &tickslock); // 这个sleep是哪里来的呢？
   }
   release(&tickslock);
   return 0;
