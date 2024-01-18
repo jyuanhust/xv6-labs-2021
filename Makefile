@@ -197,6 +197,9 @@ UPROGS=\
 	$U/_pingpong\
 	$U/_fork\
 	$U/_forktest_hjy\
+	$U/_primes\
+	$U/_find\
+	$U/_xargs\
 
 
 

@@ -9,15 +9,15 @@ fmtname(char *path)
   static char buf[DIRSIZ+1];
   char *p;
 
-  // Find first character after last slash.
+  // Find first character after last slash. slash（斜杠），即找最后一个斜杠后的第一个字母
   for(p=path+strlen(path); p >= path && *p != '/'; p--)
     ;
-  p++;
+  p++;  // 如果传入的path没有斜杠呢？那么这里的++怎么搞。根据下面的buf可知，这里必定有一个斜杠
 
   // Return blank-padded name.
   if(strlen(p) >= DIRSIZ)
     return p;
-  memmove(buf, p, strlen(p));
+  memmove(buf, p, strlen(p)); // 将p拷贝到buf中
   memset(buf+strlen(p), ' ', DIRSIZ-strlen(p));
   return buf;
 }
@@ -63,12 +63,14 @@ ls(char *path)
         printf("ls: cannot stat %s\n", buf);
         continue;
       }
+      // printf("%s\n", buf);
       printf("%s %d %d %d\n", fmtname(buf), st.type, st.ino, st.size);
     }
     break;
   }
   close(fd);
 }
+
 
 int
 main(int argc, char *argv[])

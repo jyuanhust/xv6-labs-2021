@@ -3,7 +3,7 @@
 
 
 #define ROOTINO  1   // root i-number
-#define BSIZE 1024  // block size
+#define BSIZE 1024  // block size 单位是字节吧，根据IPB是除以sizeof，
 
 // Disk layout:
 // [ boot block | super block | log | inode blocks |
@@ -24,18 +24,18 @@ struct superblock {
 
 #define FSMAGIC 0x10203040
 
-#define NDIRECT 12
-#define NINDIRECT (BSIZE / sizeof(uint))
+#define NDIRECT 12  // N DIRECT， number of directory 目录的数量
+#define NINDIRECT (BSIZE / sizeof(uint)) // 这两个有什么意义么？
 #define MAXFILE (NDIRECT + NINDIRECT)
 
 // On-disk inode structure
 struct dinode {
   short type;           // File type
-  short major;          // Major device number (T_DEVICE only)
+  short major;          // Major device number (T_DEVICE only)  对于设备文件，这两个字段的意义尚未理解
   short minor;          // Minor device number (T_DEVICE only)
   short nlink;          // Number of links to inode in file system
   uint size;            // Size of file (bytes)
-  uint addrs[NDIRECT+1];   // Data block addresses
+  uint addrs[NDIRECT+1];   // Data block addresses 为什么这里是这么个长度的数组呢？
 };
 
 // Inodes per block.
@@ -50,8 +50,8 @@ struct dinode {
 // Block of free map containing bit for block b
 #define BBLOCK(b, sb) ((b)/BPB + sb.bmapstart)
 
-// Directory is a file containing a sequence of dirent structures.
-#define DIRSIZ 14
+// Directory is a file containing a sequence of dirent structures. 不理解这个dirent，应该就是目录信息吧
+#define DIRSIZ 14  // 目录名称的最大长度？
 
 struct dirent {
   ushort inum;
