@@ -21,7 +21,8 @@ int main(int argc, char* argv[]) {
       if (fork()) {
         // 子进程
         exec(argvChild[0], argvChild);
-        // 在调用exec之后，下面的代码还会继续执行么？可以printf试试
+        // 在调用exec之后，下面的代码还会继续执行么？可以printf试试，不会了
+        // printf("hhhhhh\n");
         break;
       }
       else {
