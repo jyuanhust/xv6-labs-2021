@@ -22,7 +22,7 @@ start()
 {
   // set M Previous Privilege mode to Supervisor, for mret.
   unsigned long x = r_mstatus();
-  x &= ~MSTATUS_MPP_MASK;
+  x &= ~MSTATUS_MPP_MASK;  // 先将这几位置零
   x |= MSTATUS_MPP_S;
   w_mstatus(x);
 

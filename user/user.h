@@ -1,6 +1,8 @@
 struct stat;
 struct rtcdate;
 
+struct sysinfo;
+
 // system calls
 int fork(void);
 int exit(int) __attribute__((noreturn));
@@ -23,6 +25,10 @@ int getpid(void);
 char* sbrk(int);
 int sleep(int);
 int uptime(void);
+
+int trace(int); // 传入int，返回值为-1时说明调用失败，为0说明成功
+
+int sysinfo(struct sysinfo*);  // 返回值为-1时说明失败
 
 // ulib.c
 int stat(const char*, struct stat*);
