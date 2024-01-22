@@ -127,6 +127,15 @@ found:
     return 0;
   }
 
+  ////这里添加代码
+  if((p->usyscallptr = (uint64 *)kalloc()) == 0){
+    freeproc(p);
+    release(&p->lock);
+    return 0;
+  }
+
+  ////
+
   // An empty user page table.
   p->pagetable = proc_pagetable(p);
   if(p->pagetable == 0){
@@ -134,6 +143,12 @@ found:
     release(&p->lock);
     return 0;
   }
+
+  // 这里添加代码
+  struct usyscall *u = (struct usyscall *)p->usyscallptr;
+  u->pid = p->pid;
+  // printf("hhhhh\n");
+  ////
 
   // Set up new context to start executing at forkret,
   // which returns to user space.
@@ -153,6 +168,13 @@ freeproc(struct proc *p)
   if(p->trapframe)
     kfree((void*)p->trapframe);
   p->trapframe = 0;
+
+  // 添加代码
+  if(p->usyscallptr)
+    kfree((void*)p->usyscallptr);
+  p->usyscallptr = 0;
+  //
+
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
   p->pagetable = 0;
@@ -196,6 +218,16 @@ proc_pagetable(struct proc *p)
     return 0;
   }
 
+  // 添加代码
+  if(mappages(pagetable, USYSCALL, PGSIZE, (uint64)(p->usyscallptr), PTE_R | PTE_U) < 0){
+    uvmunmap(pagetable, TRAMPOLINE, 1, 0);
+    uvmunmap(pagetable, TRAPFRAME, 1, 0);
+    uvmfree(pagetable, 0);
+    return 0;
+  }
+  // printf("map succeed\n");
+  /////
+
   return pagetable;
 }
 
@@ -206,6 +238,11 @@ proc_freepagetable(pagetable_t pagetable, uint64 sz)
 {
   uvmunmap(pagetable, TRAMPOLINE, 1, 0);
   uvmunmap(pagetable, TRAPFRAME, 1, 0);
+
+  // 添加代码
+  uvmunmap(pagetable, USYSCALL, 1, 0);
+  //
+
   uvmfree(pagetable, sz);
 }
 
