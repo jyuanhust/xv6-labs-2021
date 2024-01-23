@@ -72,15 +72,14 @@ usertrap(void)
       p->passedTicks++;
       // printf("ticks: %d / %d\n", p->passedTicks, p->alarmInterval);
       // 因为上面有++操作，所以当alarmInterval为0的时候，必定不会进入吧
-      if(p->passedTicks == p->alarmInterval && p->handler != (void*)-1){
+      if(!p->isAlarm && p->passedTicks == p->alarmInterval && p->handler != (void*)-1){
         
         memmove(p->trapframeAlarm, p->trapframe, sizeof(struct trapframe));
-        
+        p->isAlarm = 1;
         // ((void (*)())p->handler)();  // 这样真的能调用到用户空间中的函数么？
         p->trapframe->epc = (uint64)p->handler;
 
         p->passedTicks = 0; // 重新置零，这样就可以周期性调度了
-
 
       }
     }

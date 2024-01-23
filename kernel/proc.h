@@ -110,4 +110,5 @@ struct proc {
   void * handler;
   int passedTicks;
   struct trapframe *trapframeAlarm;
+  int isAlarm;
 };
