@@ -55,6 +55,8 @@ sys_sbrk(void)
 uint64
 sys_sleep(void)
 {
+  backtrace();
+
   int n;
   uint ticks0;
 
@@ -94,4 +96,37 @@ sys_uptime(void)
   xticks = ticks;
   release(&tickslock);
   return xticks;
+}
+
+
+uint64 sys_sigalarm(void){
+  int alarmInterval;
+  void * handler;
+
+  if(argint(0, &alarmInterval) < 0)
+    return -1;
+  
+  if(argaddr(1, (uint64 *)&handler) < 0)
+    return -1;
+
+  struct proc *p = myproc();
+  p->alarmInterval = alarmInterval;
+  p->handler = handler;
+  p->passedTicks = 0;
+
+  // if(handler != (void*)0){
+  //   p->handler = handler;
+  // }
+  // 传入的虚拟地址也可能为0
+  
+  return 0;
+}
+
+
+uint64 sys_sigreturn(void){
+  struct proc *p = myproc();
+
+  memmove(p->trapframe, p->trapframeAlarm, sizeof(struct trapframe));
+
+  return 0;
 }
