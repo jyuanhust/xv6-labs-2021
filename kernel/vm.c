@@ -290,7 +290,7 @@ uvmfree(pagetable_t pagetable, uint64 sz)
     uvmunmap(pagetable, 0, PGROUNDUP(sz)/PGSIZE, 1);
   freewalk(pagetable);
 }
-
+#define PA2PID(pa) (((uint64)(pa) - KERNBASE) / PGSIZE)
 // Given a parent process's page table, copy
 // its memory into a child's page table.
 // Copies both the page table and the
@@ -303,7 +303,8 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   pte_t *pte;
   uint64 pa, i;
   uint flags;
-  char *mem;
+  
+ /*  char *mem;
 
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
@@ -319,7 +320,49 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
       kfree(mem);
       goto err;
     }
+  } */
+  
+ 
+  /* for (i = 0; i < sz; i += PGSIZE) {
+    if ((pte = walk(old, i, 0)) == 0)
+      panic("uvmcopy: pte should exist");
+    if ((*pte & PTE_V) == 0)
+      panic("uvmcopy: page not present");
+    
+    *pte = (*pte) & (~PTE_W);
+    
+    pa = PTE2PA(*pte);
+
+    flags = PTE_FLAGS(*pte);
+    // if ((mem = kalloc()) == 0)
+    //   goto err;
+    // memmove(mem, (char*)pa, PGSIZE);
+    if (mappages(new, i, PGSIZE, (uint64)pa, flags) != 0) {
+      // kfree(mem);
+      goto err;
+    }
+
+    extern int *pgcount;
+    int index = pa / 4096;
+    pgcount[index] -= 1;
+  } */
+
+  for(i = 0; i < sz; i += PGSIZE){
+    if((pte = walk(old, i, 0)) == 0)
+      panic("uvmcopy: pte should exist");
+    if((*pte & PTE_V) == 0)
+      panic("uvmcopy: page not present");
+    pa = PTE2PA(*pte);
+    *pte &= ~PTE_W;
+    *pte |= PTE_COW;
+    flags = PTE_FLAGS(*pte);
+    
+    if(mappages(new, i, PGSIZE, (uint64)pa, flags) != 0){
+      goto err;
+    }
+    V(PA2PID(pa));
   }
+
   return 0;
 
  err:
@@ -350,7 +393,13 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 
   while(len > 0){
     va0 = PGROUNDDOWN(dstva);
+    if(handleCOWfault(pagetable, dstva) == -1)
+      return -1;
+    // 这里更改一下顺序就可以通过了，这是为什么呢？
     pa0 = walkaddr(pagetable, va0);
+
+    
+
     if(pa0 == 0)
       return -1;
     n = PGSIZE - (dstva - va0);

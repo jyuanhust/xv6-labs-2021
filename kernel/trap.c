@@ -65,12 +65,103 @@ usertrap(void)
     intr_on();
 
     syscall();
-  } else if((which_dev = devintr()) != 0){
+  } 
+  else if(r_scause() == 13 || r_scause() == 15) {
+    // printf("hello\n");
+    uint64 va = r_stval();
+    if(handleCOWfault(p->pagetable, va) == -1){
+      p->killed = 1;
+    }
+      
+  }
+  
+  else if((which_dev = devintr()) != 0){
     // ok
-  } else {
+  } 
+  /* else if(r_scause() == 0x000000000000000f){
+    // 新添加的
+    uint64 pa, va;
+    pte_t* pte;
+    va = r_stval();
+    va = PGROUNDDOWN(va); // 这里PGROUNDDOWN或者没有都是没问题的，因为pte不涉及低12位
+
+    if ((pte = walk(p->pagetable, va, 0)) == 0)
+      panic("usertrap: pte should exist");
+
+    if ((*pte & PTE_V) == 0)
+      panic("usertrap: page not present");
+
+    // if(*pte & PTE_W){
+    //   printf("can be writed\n"); // 这里是正常的
+    // }
+
+    pa = PTE2PA(*pte);
+
+    // printf("pte: %p\t pa: %p\n", *pte, pa); // 这两个是有发生变化的，说明这里的执行没有问题
+
+    // printf("%p\t", *pte);
+
+    char* mem;
+    uint flags;
+    flags = PTE_FLAGS(*pte);
+
+    if ((mem = kalloc()) == 0)
+      panic("usertrap: page is short for use");
+
+    *pte = PA2PTE(mem) | flags | PTE_W;
+
+    // printf("%p\n", *pte);
+
+    memmove(mem, (char*)pa, PGSIZE);
+
+    extern int *pgcount;
+    int index = pa / 4096;
+    pgcount[index] -= 1;
+  } */
+  
+  else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
     p->killed = 1;
+
+    // 上面是原始代码
+    // 现在是假设进入到这里都是因为发生页错误，stval寄存器保存发生错误的虚拟地址
+    // 这种假设是合理的，因此未修改的代码不会进入这里，而修改之后只会发生
+    /* uint64 pa, va;
+    pte_t* pte;
+    va = r_stval();
+    va = PGROUNDDOWN(va);
+
+    if((pte = walk(p->pagetable, va, 0)) == 0)
+      panic("usertrap: pte should exist");
+    
+    if((*pte & PTE_V) == 0)
+      panic("usertrap: page not present");
+
+    // if(*pte & PTE_W){
+    //   printf("can be writed\n"); // 这里是正常的
+    // }
+
+    pa = PTE2PA(*pte);
+
+    // printf("pte: %p\t pa: %p\n", *pte, pa); // 这两个是有发生变化的，说明这里的执行没有问题
+
+    // printf("%p\t", *pte);
+
+    char *mem;
+    uint flags;
+    flags = PTE_FLAGS(*pte);
+    
+    if((mem = kalloc()) == 0)
+      panic("usertrap: page is short for use");
+
+    *pte = PA2PTE(mem) | flags | PTE_W;
+
+    // printf("%p\n", *pte);
+
+    memmove(mem, (char*)pa, PGSIZE); */
+    // 这里会不会发生问题，出现在读取pa的时候，不对，读取不会出现问题的
+    
   }
 
   if(p->killed)
