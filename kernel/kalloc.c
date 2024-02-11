@@ -157,9 +157,6 @@ kalloc(void)
     kmem.freelist = r->next;
     pagerefcount[PA2INDEX(r)] = 1;
   }
-  else{
-    printf("error\n");
-  }
 
   // int index = pa2index(r);
   // pagerefcount[index] = 1;

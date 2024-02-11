@@ -329,7 +329,12 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
       panic("uvmcopy: page not present");
     pa = PTE2PA(*pte);
     
-    *pte = (*pte & ~PTE_W) | PTE_COW; // 旧页表上的pte也要发生变化
+    // 假如这个页面是可写的，则清除PTE_W并加上PTE_COW
+    if(*pte & PTE_W){
+      *pte = (*pte & ~PTE_W) | PTE_COW;
+    }
+
+    // *pte = (*pte & ~PTE_W) | PTE_COW; // 旧页表上的pte也要发生变化
     flags = PTE_FLAGS(*pte); 
 
     if (mappages(new, i, PGSIZE, (uint64)pa, flags) != 0) {
@@ -370,35 +375,9 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 
   while(len > 0){
     va0 = PGROUNDDOWN(dstva);
-    
-    uint64 pa;
-    pte_t* pte;
-    pte = walk(pagetable, va0, 0);
 
-    if(pte == 0 || (*pte & PTE_V) == 0 || (*pte & PTE_U) == 0)
+    if(cowhandler(pagetable, va0) < 0)
       return -1;
-    
-    
-
-    if ((*pte & PTE_W) == 0) {
-      // printf("hello\n");
-      if ((*pte & PTE_COW) == 0)
-        return -1;
-
-      char* mem;
-      if ((mem = kalloc()) == 0){
-        // panic("usertrap: memory run out\n");
-        printf("copyout: memory run out\n");
-        return -1;
-      }
-        
-      uint flags = PTE_FLAGS(*pte) | PTE_W;
-      pa = PTE2PA(*pte);
-      memmove(mem, (char*)pa, PGSIZE);
-
-      *pte = PA2PTE(mem) | flags;
-      kfree((void *)pa);
-    }
 
     pa0 = walkaddr(pagetable, va0); // 这里得到的pa0指向的页可能是只读页，另外va0可能不是页对齐的
     if(pa0 == 0){
@@ -487,4 +466,41 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   } else {
     return -1;
   }
+}
+
+// -1 for error, 0 for success
+// 主要是对页面的写入功能，虚拟地址va对应的物理页面能否被写入
+// 综合了trap和copyout，需要具备有在copyout中的检查功能
+// 即如果这个页面本来就可写，则直接返回成功0
+// va 是虚拟地址，
+int cowhandler(pagetable_t pagetable, uint64 va){
+  if(va >= MAXVA)
+    return -1;
+
+  pte_t *pte;
+  uint64 pa;
+
+  if ((pte = walk(pagetable, va, 0)) == 0) {
+    return -1;
+  }
+
+  if(*pte & PTE_W)
+    return 0;
+
+  if((*pte & PTE_COW) == 0)
+    return -1;
+
+  pa = PTE2PA(*pte);
+  char* mem;
+  if ((mem = kalloc()) == 0){
+    printf("cowhandler: memory page run out\n");
+    return -1;
+  }
+  memmove(mem, (char*)pa, PGSIZE);
+
+  uint flags = (PTE_FLAGS(*pte) & ~PTE_COW ) | PTE_W;
+
+  *pte = PA2PTE(mem) | flags;
+  kfree((void*)pa);
+  return 0;
 }

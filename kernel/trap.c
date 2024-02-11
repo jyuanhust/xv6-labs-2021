@@ -65,47 +65,15 @@ usertrap(void)
     intr_on();
 
     syscall();
-  } else if(r_scause() == 15 ){
-    // printf("r_scause() == 15 \n");
-    uint64 va, pa;
+  } 
+  else if(r_scause() == 15 ){
+    uint64 va;
     va = r_stval();
-    pagetable_t pagetable = p->pagetable;
-    pte_t *pte;
-
-    if ((pte = walk(pagetable, va, 0)) == 0){
-      panic("usertrap: pte should exist");
+    if(cowhandler(p->pagetable, va) < 0){
       p->killed = 1;
     }
-
-    if(pte == 0 || (*pte & PTE_V) == 0 || (*pte & PTE_U) == 0){
-      p->killed = 1;
-    }
-      
-    if((*pte & PTE_COW) == 0){
-      p->killed = 1;
-      
-    }else{
-
-      pa = PTE2PA(*pte);
-      char* mem;
-      if ((mem = kalloc()) == 0){
-        printf("copyout: memory run out\n");
-        p->killed = 1;
-      }else{
-        uint flags = PTE_FLAGS(*pte) | PTE_W;
-        memmove(mem, (char*)pa, PGSIZE);
-
-        *pte = PA2PTE(mem) | flags;
-        // 上面和下面的区别，应该是一样的
-        // if(mappages(pagetable, va, PGSIZE, (uint64)mem, flags) != 0){
-        //   kfree(mem);
-        // }
-        kfree((void*)pa);
-      }
-      
-    }
-
-  } else if((which_dev = devintr()) != 0){
+  }
+  else if((which_dev = devintr()) != 0){
     // ok
   } else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
