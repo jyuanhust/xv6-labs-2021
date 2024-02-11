@@ -303,7 +303,7 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   pte_t *pte;
   uint64 pa, i;
   uint flags;
-  char *mem;
+  /* char *mem;
 
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
@@ -319,7 +319,32 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
       kfree(mem);
       goto err;
     }
+  } */
+
+
+  for (i = 0; i < sz; i += PGSIZE) {
+    if ((pte = walk(old, i, 0)) == 0)
+      panic("uvmcopy: pte should exist");
+    if ((*pte & PTE_V) == 0)
+      panic("uvmcopy: page not present");
+    pa = PTE2PA(*pte);
+    flags = PTE_FLAGS(*pte) & ~PTE_W;
+    *pte = *pte & ~PTE_W; // 旧页表上的pte也要发生变化
+
+    // 这里应该封装的才对
+    int index = pa2index((void *)pa);
+    extern int *pagerefcount;
+    extern struct spinlock pagerefcountLock;
+    acquire(&pagerefcountLock);
+    pagerefcount[index] += 1;
+    release(&pagerefcountLock);
+
+    if (mappages(new, i, PGSIZE, (uint64)pa, flags) != 0) {
+      goto err;
+    }
   }
+
+
   return 0;
 
  err:
@@ -346,22 +371,48 @@ uvmclear(pagetable_t pagetable, uint64 va)
 int
 copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 {
+  // printf("copyout\n");
   uint64 n, va0, pa0;
 
   while(len > 0){
     va0 = PGROUNDDOWN(dstva);
-    pa0 = walkaddr(pagetable, va0);
-    if(pa0 == 0)
+    
+    uint64 pa;
+    pte_t* pte;
+    pte = walk(pagetable, va0, 0);
+
+    
+    if ((*pte & PTE_W) == 0) {
+      // printf("hello\n");
+      char* mem;
+      if ((mem = kalloc()) == 0)
+        panic("usertrap: memory run out\n");
+      uint flags = PTE_FLAGS(*pte) | PTE_W;
+      pa = PTE2PA(*pte);
+      memmove(mem, (char*)pa, PGSIZE);
+
+      *pte = PA2PTE(mem) | flags;
+      kfree((void *)pa);
+    }
+
+    pa0 = walkaddr(pagetable, va0); // 这里得到的pa0指向的页可能是只读页，另外va0可能不是页对齐的
+    if(pa0 == 0){
+      printf("errojjjjjjjjjjjjr\n");  // 也没有进入这里
       return -1;
+    }
+      
     n = PGSIZE - (dstva - va0);
     if(n > len)
       n = len;
+    
+    // printf("memmove\n");
     memmove((void *)(pa0 + (dstva - va0)), src, n);
-
+    // printf("vvvvvv: %d\n", *(int *)(pa0 + (dstva - va0)));
     len -= n;
     src += n;
     dstva = va0 + PGSIZE;
   }
+  // printf("success\n");
   return 0;
 }
 
