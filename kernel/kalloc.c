@@ -37,6 +37,42 @@ int pa2index(void *pa){
   return index;
 }
 
+#define PA2INDEX(pa) (((uint64)pa - (uint64)newEnd) / PGSIZE)
+
+void increPagerefcount(void* pa) {
+  acquire(&pagerefcountLock);
+  // int index = pa2index(pa);
+  int index = PA2INDEX(pa);
+  // if (--pagerefcount[index] > 0) {
+  //   release(&pagerefcountLock);
+  //   return;
+  // }
+  // else if (pagerefcount[index] < 0) {
+  //   panic("increPagerefcount: error");
+  // }
+
+  // 还得加条件判断，
+  if(index < 0 || index >= pagerefcountLen)
+    panic("increPagerefcount: index wrong");
+  
+  pagerefcount[index]++;
+  release(&pagerefcountLock);
+}
+
+void decrePagerefcount(void* pa){
+  acquire(&pagerefcountLock);
+  // int index = pa2index(pa);
+  int index = PA2INDEX(pa);
+  if (--pagerefcount[index] > 0) {
+    release(&pagerefcountLock);
+    return;
+  }
+  else if (pagerefcount[index] < 0) {
+    panic("increPagerefcount: error");
+  }
+  release(&pagerefcountLock);
+}
+
 void
 kinit()
 {
@@ -85,7 +121,8 @@ kfree(void *pa)
     panic("kfree");
 
   acquire(&pagerefcountLock);
-  int index = pa2index(pa);
+  // int index = pa2index(pa);
+  int index = PA2INDEX(pa);
   if(--pagerefcount[index] > 0){
     release(&pagerefcountLock);
     return;
@@ -116,14 +153,17 @@ kalloc(void)
 
   acquire(&kmem.lock);
   r = kmem.freelist;
-  if(r)
+  if(r){
     kmem.freelist = r->next;
+    pagerefcount[PA2INDEX(r)] = 1;
+  }
   else{
     printf("error\n");
   }
 
-  int index = pa2index(r);
-  pagerefcount[index] = 1;
+  // int index = pa2index(r);
+  // pagerefcount[index] = 1;
+  // pagerefcount[PA2INDEX(r)] = 1; // 移到上面去
   
   release(&kmem.lock);
 

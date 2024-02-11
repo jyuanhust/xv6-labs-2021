@@ -328,20 +328,14 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
     if ((*pte & PTE_V) == 0)
       panic("uvmcopy: page not present");
     pa = PTE2PA(*pte);
-    flags = PTE_FLAGS(*pte) & ~PTE_W;
+    
     *pte = *pte & ~PTE_W; // 旧页表上的pte也要发生变化
-
-    // 这里应该封装的才对
-    int index = pa2index((void *)pa);
-    extern int *pagerefcount;
-    extern struct spinlock pagerefcountLock;
-    acquire(&pagerefcountLock);
-    pagerefcount[index] += 1;
-    release(&pagerefcountLock);
+    flags = PTE_FLAGS(*pte);
 
     if (mappages(new, i, PGSIZE, (uint64)pa, flags) != 0) {
       goto err;
     }
+    increPagerefcount((void *)pa); // map成功之后再增加计数
   }
 
 
@@ -381,6 +375,8 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
     pte_t* pte;
     pte = walk(pagetable, va0, 0);
 
+    if(pte == 0 || (*pte & PTE_V) == 0 || (*pte & PTE_U) == 0)
+      return -1;
     
     if ((*pte & PTE_W) == 0) {
       // printf("hello\n");

@@ -64,6 +64,7 @@ void*           kalloc(void);
 void            kfree(void *);
 void            kinit(void);
 int pa2index(void *pa);
+void increPagerefcount(void* pa);
 
 // log.c
 void            initlog(int, struct superblock*);
