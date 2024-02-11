@@ -329,8 +329,8 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
       panic("uvmcopy: page not present");
     pa = PTE2PA(*pte);
     
-    *pte = *pte & ~PTE_W; // 旧页表上的pte也要发生变化
-    flags = PTE_FLAGS(*pte);
+    *pte = (*pte & ~PTE_W) | PTE_COW; // 旧页表上的pte也要发生变化
+    flags = PTE_FLAGS(*pte); 
 
     if (mappages(new, i, PGSIZE, (uint64)pa, flags) != 0) {
       goto err;
@@ -378,11 +378,20 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
     if(pte == 0 || (*pte & PTE_V) == 0 || (*pte & PTE_U) == 0)
       return -1;
     
+    
+
     if ((*pte & PTE_W) == 0) {
       // printf("hello\n");
+      if ((*pte & PTE_COW) == 0)
+        return -1;
+
       char* mem;
-      if ((mem = kalloc()) == 0)
-        panic("usertrap: memory run out\n");
+      if ((mem = kalloc()) == 0){
+        // panic("usertrap: memory run out\n");
+        printf("copyout: memory run out\n");
+        return -1;
+      }
+        
       uint flags = PTE_FLAGS(*pte) | PTE_W;
       pa = PTE2PA(*pte);
       memmove(mem, (char*)pa, PGSIZE);
