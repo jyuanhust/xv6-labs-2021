@@ -11,9 +11,30 @@
 #define MAX_THREAD  4
 
 
+// Saved registers for kernel context switches. 需改
+struct context {
+  uint64 ra;
+  uint64 sp;
+
+  // callee-saved
+  uint64 s0;
+  uint64 s1;
+  uint64 s2;
+  uint64 s3;
+  uint64 s4;
+  uint64 s5;
+  uint64 s6;
+  uint64 s7;
+  uint64 s8;
+  uint64 s9;
+  uint64 s10;
+  uint64 s11;
+};
+
 struct thread {
   char       stack[STACK_SIZE]; /* the thread's stack */
   int        state;             /* FREE, RUNNING, RUNNABLE */
+  struct context context;      // swtch() here to run process
 };
 struct thread all_thread[MAX_THREAD];
 struct thread *current_thread;
@@ -29,6 +50,9 @@ thread_init(void)
   // a RUNNABLE thread.
   current_thread = &all_thread[0];
   current_thread->state = RUNNING;
+
+  // main 线程的栈不用自行定义的吧
+  // main 执行的时候，有自己的ra和sp，但是这个ra
 }
 
 void 
@@ -62,6 +86,7 @@ thread_schedule(void)
      * Invoke thread_switch to switch from t to next_thread:
      * thread_switch(??, ??);
      */
+    thread_switch((uint64)&t->context, (uint64)&current_thread->context);
   } else
     next_thread = 0;
 }
@@ -76,6 +101,9 @@ thread_create(void (*func)())
   }
   t->state = RUNNABLE;
   // YOUR CODE HERE
+
+  t->context.ra = (uint64)func;
+  t->context.sp = (uint64)t->stack + STACK_SIZE - 1; // 这个地址是可以使用的
 }
 
 void 
@@ -153,10 +181,14 @@ main(int argc, char *argv[])
 {
   a_started = b_started = c_started = 0;
   a_n = b_n = c_n = 0;
+  // printf("============start\n");
   thread_init();
   thread_create(thread_a);
   thread_create(thread_b);
   thread_create(thread_c);
+  // current_thread->state = RUNNABLE; 
+  // 将main thread改为runnable之后，就会重新回到main中了，然后就会执行最下面的exit
   thread_schedule();
+  // printf("============end\n");  // 这里是不能执行到的。
   exit(0);
 }
