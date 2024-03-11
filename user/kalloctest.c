@@ -30,8 +30,8 @@ int ntas(int print)
   if (statistics(buf, SZ) <= 0) {
     fprintf(2, "ntas: no stats\n");
   }
-  c = strchr(buf, '=');
-  n = atoi(c+2);
+  c = strchr(buf, '='); // 找到字符串中'='出现的位置
+  n = atoi(c+2);  // 将字符串转为数字
   if(print)
     printf("%s", buf);
   return n;
@@ -49,11 +49,11 @@ void test1(void)
       printf("fork failed");
       exit(-1);
     }
-    if(pid == 0){
+    if(pid == 0){  // 子进程
       for(i = 0; i < N; i++) {
-        a = sbrk(4096);
+        a = sbrk(4096);  // 增加内存空间
         *(int *)(a+4) = 1;
-        a1 = sbrk(-4096);
+        a1 = sbrk(-4096);  // 减少内存空间
         if (a1 != a + 4096) {
           printf("wrong sbrk\n");
           exit(-1);
@@ -76,7 +76,7 @@ void test1(void)
 
 //
 // countfree() from usertests.c
-//
+// 统计存在可分配的页的数量
 int
 countfree()
 {
