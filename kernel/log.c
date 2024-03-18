@@ -33,20 +33,20 @@
 // Contents of the header block, used for both the on-disk header block
 // and to keep track in memory of logged block# before commit.
 struct logheader {
-  int n;
-  int block[LOGSIZE];
-};
+  int n;  // 表示下面的block数组中用了多少个，不能每次都写满LOGSIZE个的
+  int block[LOGSIZE];  // 保存待迁移的块号，log.start之后存储的块和这里的块号应该是一一对应的
+};  // 内存和磁盘结构，需要从磁盘读取和写入，在磁盘上使用log区域的第一个块（log.start）存储（但明显不足一个块）
 
 struct log {
   struct spinlock lock;
-  int start;
-  int size;
+  int start;       // 开始块号（磁盘上的块号是唯一的，从0开始编号）
+  int size;        // 有多少个块 block
   int outstanding; // how many FS sys calls are executing.
   int committing;  // in commit(), please wait.
   int dev;
   struct logheader lh;
 };
-struct log log;
+struct log log;  // 纯内存结构，不会存储到磁盘（除了里面的lh字段）
 
 static void recover_from_log(void);
 static void commit();
@@ -71,12 +71,12 @@ install_trans(int recovering)
   int tail;
 
   for (tail = 0; tail < log.lh.n; tail++) {
-    struct buf *lbuf = bread(log.dev, log.start+tail+1); // read log block
+    struct buf *lbuf = bread(log.dev, log.start+tail+1); // read log block 注意这里的1，因为第一个块存储的logheader
     struct buf *dbuf = bread(log.dev, log.lh.block[tail]); // read dst
     memmove(dbuf->data, lbuf->data, BSIZE);  // copy block to dst
     bwrite(dbuf);  // write dst to disk
     if(recovering == 0)
-      bunpin(dbuf);
+      bunpin(dbuf);  // 这个和log_write中的bpin是一对的，都是将数据块保留在buffer中，增加refcnt使之不被逐出
     brelse(lbuf);
     brelse(dbuf);
   }
@@ -134,7 +134,7 @@ begin_op(void)
       // this op might exhaust log space; wait for commit.
       sleep(&log, &log.lock);
     } else {
-      log.outstanding += 1;
+      log.outstanding += 1;  // 核心
       release(&log.lock);
       break;
     }
@@ -181,14 +181,14 @@ write_log(void)
   int tail;
 
   for (tail = 0; tail < log.lh.n; tail++) {
-    struct buf *to = bread(log.dev, log.start+tail+1); // log block
-    struct buf *from = bread(log.dev, log.lh.block[tail]); // cache block
+    struct buf *to = bread(log.dev, log.start+tail+1); // log block 这里为什么要去磁盘去读呢？因为下面就覆盖了，这里能不能优化一下呢？
+    struct buf *from = bread(log.dev, log.lh.block[tail]); // cache block 这个块应该已经在buffer中了，
     memmove(to->data, from->data, BSIZE);
     bwrite(to);  // write the log
     brelse(from);
     brelse(to);
   }
-}
+}  // write_log 只被下面的commit调用
 
 static void
 commit()

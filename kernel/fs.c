@@ -26,7 +26,7 @@
 // only one device
 struct superblock sb; 
 
-// Read the super block.
+// Read the super block.  只会被下面的fsinit调用，因此也只会执行一次
 static void
 readsb(int dev, struct superblock *sb)
 {
@@ -37,7 +37,7 @@ readsb(int dev, struct superblock *sb)
   brelse(bp);
 }
 
-// Init fs
+// Init fs  只会执行一次
 void
 fsinit(int dev) {
   readsb(dev, &sb);
@@ -68,8 +68,8 @@ balloc(uint dev)
   struct buf *bp;
 
   bp = 0;
-  for(b = 0; b < sb.size; b += BPB){
-    bp = bread(dev, BBLOCK(b, sb));
+  for(b = 0; b < sb.size; b += BPB){  // sb.size 是data block的数量还是所有block的数量？
+    bp = bread(dev, BBLOCK(b, sb));  // 获取一个bitmap块
     for(bi = 0; bi < BPB && b + bi < sb.size; bi++){
       m = 1 << (bi % 8);
       if((bp->data[bi/8] & m) == 0){  // Is block free?
@@ -374,7 +374,7 @@ iunlockput(struct inode *ip)
 
 // Return the disk block address of the nth block in inode ip.
 // If there is no such block, bmap allocates one.
-static uint
+/* static uint
 bmap(struct inode *ip, uint bn)
 {
   uint addr, *a;
@@ -382,7 +382,7 @@ bmap(struct inode *ip, uint bn)
 
   if(bn < NDIRECT){
     if((addr = ip->addrs[bn]) == 0)
-      ip->addrs[bn] = addr = balloc(ip->dev);
+      ip->addrs[bn] = addr = balloc(ip->dev);  // 返回一个空闲块的块号
     return addr;
   }
   bn -= NDIRECT;
@@ -397,16 +397,84 @@ bmap(struct inode *ip, uint bn)
       a[bn] = addr = balloc(ip->dev);
       log_write(bp);
     }
+    brelse(bp);  // 和bread对应的，bread有块引用计数加1，brelse将引用计数减1
+    return addr;
+  }
+
+
+  panic("bmap: out of range");
+} */
+
+
+static uint
+bmap(struct inode *ip, uint bn)
+{
+  uint addr, *a;
+  struct buf *bp;
+
+  if(bn < NDIRECT){
+    if((addr = ip->addrs[bn]) == 0)
+      ip->addrs[bn] = addr = balloc(ip->dev);  // 返回一个空闲块的块号
+    return addr;
+  }
+  bn -= NDIRECT;
+
+  if(bn < NINDIRECT){
+    // Load indirect block, allocating if necessary.
+    if((addr = ip->addrs[NDIRECT]) == 0)
+      ip->addrs[NDIRECT] = addr = balloc(ip->dev);
+    bp = bread(ip->dev, addr);
+    a = (uint*)bp->data;
+    if((addr = a[bn]) == 0){
+      a[bn] = addr = balloc(ip->dev);
+      log_write(bp);
+    }
+    brelse(bp);  // 和bread对应的，bread有块引用计数加1，brelse将引用计数减1
+    return addr;
+  }
+  
+  bn -= NINDIRECT;
+
+  if(bn < NININDIRECT){
+    // Load inindirect block, allocating if necessary.
+    if ((addr = ip->addrs[NDIRECT + 1]) == 0)
+      ip->addrs[NDIRECT + 1] = addr = balloc(ip->dev);
+    
+    // 将一级读取出来
+    bp = bread(ip->dev, addr);
+
+    int bnn = bn / NINDIRECT;  // 在一级中的下标
+
+    a = (uint*)bp->data;
+    if((addr = a[bnn]) == 0){
+      a[bnn] = addr = balloc(ip->dev);  // 再分配一个表，二级表
+      log_write(bp);
+    }
+
     brelse(bp);
+
+    int n = bn % NINDIRECT;
+
+    bp = bread(ip->dev, addr);  // 读取二级表
+    
+    a = (uint*)bp->data;
+    if((addr = a[n]) == 0){
+      a[n] = addr = balloc(ip->dev);  // 分配数据块
+      log_write(bp);
+    }
+
+    brelse(bp);  // 和bread对应的，bread有块引用计数加1，brelse将引用计数减1
     return addr;
   }
 
   panic("bmap: out of range");
 }
 
+
+
 // Truncate inode (discard contents).
 // Caller must hold ip->lock.
-void
+/* void
 itrunc(struct inode *ip)
 {
   int i, j;
@@ -430,6 +498,60 @@ itrunc(struct inode *ip)
     brelse(bp);
     bfree(ip->dev, ip->addrs[NDIRECT]);
     ip->addrs[NDIRECT] = 0;
+  }
+
+  ip->size = 0;
+  iupdate(ip);
+} */
+
+
+void
+itrunc(struct inode *ip)
+{
+  int i, j;
+  struct buf *bp;
+  uint *a;
+
+  for(i = 0; i < NDIRECT; i++){
+    if(ip->addrs[i]){
+      bfree(ip->dev, ip->addrs[i]);
+      ip->addrs[i] = 0;
+    }
+  }
+
+  if(ip->addrs[NDIRECT]){
+    bp = bread(ip->dev, ip->addrs[NDIRECT]); // 一级表
+    a = (uint*)bp->data;
+    for(j = 0; j < NINDIRECT; j++){
+      if(a[j])
+        bfree(ip->dev, a[j]);
+    }
+    brelse(bp);
+    bfree(ip->dev, ip->addrs[NDIRECT]);
+    ip->addrs[NDIRECT] = 0;
+  }
+
+  if(ip->addrs[NDIRECT + 1]){
+    bp = bread(ip->dev, ip->addrs[NDIRECT + 1]); // 一级表
+    a = (uint*)bp->data;
+    for(j = 0; j < NINDIRECT; j++){
+      if(a[j]){
+        struct buf *bpp;
+        bpp = bread(ip->dev, a[j]);  // 二级表
+        uint *b;
+        b = (uint*)bpp->data;
+        for (int k = 0; k < NINDIRECT; k++) {
+          if (b[k])
+            bfree(ip->dev, b[k]);
+        }
+        brelse(bpp);
+        bfree(ip->dev, a[j]);
+        a[j] = 0;
+      }
+    }
+    brelse(bp);
+    bfree(ip->dev, ip->addrs[NDIRECT + 1]);
+    ip->addrs[NDIRECT + 1] = 0;
   }
 
   ip->size = 0;

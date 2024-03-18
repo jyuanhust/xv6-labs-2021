@@ -26,7 +26,8 @@ struct inode {
   short minor;
   short nlink;
   uint size;
-  uint addrs[NDIRECT+1];
+  // uint addrs[NDIRECT+1]; // 这里要修改，变成NDIRECT+2，但其实总数是没变的
+  uint addrs[NDIRECT+2];
 };
 
 // map major device number to device functions.

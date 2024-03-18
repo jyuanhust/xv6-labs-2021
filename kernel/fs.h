@@ -24,9 +24,12 @@ struct superblock {
 
 #define FSMAGIC 0x10203040
 
-#define NDIRECT 12
+// #define NDIRECT 12  // 这里要修改，变成 11
+#define NDIRECT 11
 #define NINDIRECT (BSIZE / sizeof(uint))
-#define MAXFILE (NDIRECT + NINDIRECT)
+#define NININDIRECT ((BSIZE / sizeof(uint)) * (BSIZE / sizeof(uint))) // 新增的，相比上面的一级，这是二级
+// #define MAXFILE (NDIRECT + NINDIRECT)  // 文件能够含有的最多块数，需修改
+#define MAXFILE (NDIRECT + NINDIRECT + NININDIRECT)
 
 // On-disk inode structure
 struct dinode {
@@ -35,7 +38,8 @@ struct dinode {
   short minor;          // Minor device number (T_DEVICE only)
   short nlink;          // Number of links to inode in file system
   uint size;            // Size of file (bytes)
-  uint addrs[NDIRECT+1];   // Data block addresses
+  // uint addrs[NDIRECT+1];   // Data block addresses  这里要修改，变成NDIRECT+2，但其实总数是没变的
+  uint addrs[NDIRECT+2];
 };
 
 // Inodes per block.
