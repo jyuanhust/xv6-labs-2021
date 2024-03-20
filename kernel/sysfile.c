@@ -118,7 +118,7 @@ sys_fstat(void)
 // Create the path new as a link to the same inode as old.
 uint64
 sys_link(void)
-{
+{ // 这里就是硬链接
   char name[DIRSIZ], new[MAXPATH], old[MAXPATH];
   struct inode *dp, *ip;
 
@@ -132,7 +132,7 @@ sys_link(void)
   }
 
   ilock(ip);
-  if(ip->type == T_DIR){
+  if(ip->type == T_DIR){  // 不能链接到目录
     iunlockput(ip);
     end_op();
     return -1;
@@ -142,10 +142,10 @@ sys_link(void)
   iupdate(ip);
   iunlock(ip);
 
-  if((dp = nameiparent(new, name)) == 0)
+  if((dp = nameiparent(new, name)) == 0)  // 寻找目录的inode
     goto bad;
   ilock(dp);
-  if(dp->dev != ip->dev || dirlink(dp, name, ip->inum) < 0){
+  if(dp->dev != ip->dev || dirlink(dp, name, ip->inum) < 0){  // 添加目录项
     iunlockput(dp);
     goto bad;
   }
@@ -210,16 +210,16 @@ sys_unlink(void)
 
   if(ip->nlink < 1)
     panic("unlink: nlink < 1");
-  if(ip->type == T_DIR && !isdirempty(ip)){
+  if(ip->type == T_DIR && !isdirempty(ip)){ // 当删除对象是目录并且不为空的时候，不能删除
     iunlockput(ip);
     goto bad;
   }
 
   memset(&de, 0, sizeof(de));
-  if(writei(dp, 0, (uint64)&de, off, sizeof(de)) != sizeof(de))
+  if(writei(dp, 0, (uint64)&de, off, sizeof(de)) != sizeof(de))  // 删除就是写入0值覆盖
     panic("unlink: writei");
   if(ip->type == T_DIR){
-    dp->nlink--;
+    dp->nlink--;  // 为什么这里要减少？
     iupdate(dp);
   }
   iunlockput(dp);
@@ -249,7 +249,7 @@ create(char *path, short type, short major, short minor)
 
   ilock(dp);
 
-  if((ip = dirlookup(dp, name, 0)) != 0){
+  if((ip = dirlookup(dp, name, 0)) != 0){  // 如果要创建的文件已经存在
     iunlockput(dp);
     ilock(ip);
     if(type == T_FILE && (ip->type == T_FILE || ip->type == T_DEVICE))
@@ -271,7 +271,7 @@ create(char *path, short type, short major, short minor)
     dp->nlink++;  // for ".."
     iupdate(dp);
     // No ip->nlink++ for ".": avoid cyclic ref count.
-    if(dirlink(ip, ".", ip->inum) < 0 || dirlink(ip, "..", dp->inum) < 0)
+    if(dirlink(ip, ".", ip->inum) < 0 || dirlink(ip, "..", dp->inum) < 0)  // ip->inum还没有赋值呀
       panic("create dots");
   }
 
@@ -280,9 +280,10 @@ create(char *path, short type, short major, short minor)
 
   iunlockput(dp);
 
-  return ip;
+  return ip;  // 返回时ip仍然是上锁的，并且没有更新到磁盘上
 }
 
+/* 
 uint64
 sys_open(void)
 {
@@ -314,6 +315,101 @@ sys_open(void)
       end_op();
       return -1;
     }
+  }
+
+  if(ip->type == T_DEVICE && (ip->major < 0 || ip->major >= NDEV)){
+    iunlockput(ip);
+    end_op();
+    return -1;
+  }
+
+  if((f = filealloc()) == 0 || (fd = fdalloc(f)) < 0){
+    if(f)
+      fileclose(f);
+    iunlockput(ip);
+    end_op();
+    return -1;
+  }
+
+  if(ip->type == T_DEVICE){
+    f->type = FD_DEVICE;
+    f->major = ip->major;
+  } else {
+    f->type = FD_INODE;
+    f->off = 0;
+  }
+  f->ip = ip;
+  f->readable = !(omode & O_WRONLY);
+  f->writable = (omode & O_WRONLY) || (omode & O_RDWR);
+
+  if((omode & O_TRUNC) && ip->type == T_FILE){
+    itrunc(ip);
+  }
+
+  iunlock(ip);
+  end_op();
+
+  return fd;
+}
+ */
+
+uint64
+sys_open(void)
+{
+  char path[MAXPATH];
+  int fd, omode;
+  struct file *f;
+  struct inode *ip;
+  int n;
+
+  if((n = argstr(0, path, MAXPATH)) < 0 || argint(1, &omode) < 0)
+    return -1;
+
+  begin_op();
+
+  if(omode & O_CREATE){
+    ip = create(path, T_FILE, 0, 0); // create返回时ip仍然是上锁的，并且没有更新到磁盘上
+    if(ip == 0){
+      end_op();
+      return -1;
+    }
+  } else {
+    if((ip = namei(path)) == 0){  // namei返回时ip是没有上锁的
+      end_op();
+      return -1;
+    }
+    ilock(ip);
+    if(ip->type == T_DIR && omode != O_RDONLY){
+      iunlockput(ip);
+      end_op();
+      return -1;
+    }
+  }
+
+
+  int i = 0; // 记录循环次数，避免陷入软链接的死循环中
+
+  while ((ip->type == T_SYMLINK) && ((omode & O_NOFOLLOW) == 0)){
+
+    char path[MAXPATH];
+    if (readi(ip, 0, (uint64)path, 0, MAXPATH) != MAXPATH)
+      panic("sys_open: readi");
+    
+    iunlockput(ip);  // 这个ip用不着了，下面会重新读取
+
+    if(i == 10){  // 达到循环上限，退出
+      end_op();
+      return -1;
+    }
+
+    if((ip = namei(path)) == 0){
+      end_op();
+      return -1;
+    }
+    ilock(ip);
+
+    i++;
+    
   }
 
   if(ip->type == T_DEVICE && (ip->major < 0 || ip->major >= NDEV)){
@@ -482,5 +578,38 @@ sys_pipe(void)
     fileclose(wf);
     return -1;
   }
+  return 0;
+}
+
+// path路径下建立对target的软/符号链接
+uint64 
+sys_symlink(void){
+  char target[MAXPATH], path[MAXPATH];
+  struct inode *ip;
+
+  memset(target, 0, MAXPATH);
+
+  if (argstr(0, target, MAXPATH) < 0 || argstr(1, path, MAXPATH) < 0)
+    return -1;
+
+  // 现在path下建立目录项，分配inode（参考sys_link、create）
+  begin_op();
+  // if((dp = nameiparent(path, name)) == 0)  // 寻找目录的inode
+  //   goto bad;
+  
+  if( (ip = create(path, T_SYMLINK, 0, 0)) == 0){
+    end_op();
+    return -1;
+  }
+
+  // ilock(ip); // create 返回ip时，ip仍然是上锁状态的
+
+  // 将target写入inode对应的数据块中。（读取和写入都采用固定的字节数）
+  if (writei(ip, 0, (uint64)target, 0, MAXPATH) != MAXPATH)  // 删除就是写入0值覆盖
+    panic("sys_symlink: writei");
+
+  iunlockput(ip);
+  end_op();
+
   return 0;
 }

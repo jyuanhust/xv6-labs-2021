@@ -44,7 +44,10 @@ cleanup(void)
 static int
 stat_slink(char *pn, struct stat *st)
 {
+  // printf("stat_slink\n");
+  // printf("omode: %d\n", O_RDONLY | O_NOFOLLOW);
   int fd = open(pn, O_RDONLY | O_NOFOLLOW);
+
   if(fd < 0)
     return -1;
   if(fstat(fd, st) != 0)

@@ -25,7 +25,7 @@ struct inode {
   short major;
   short minor;
   short nlink;
-  uint size;
+  uint size;          // 文件内容有多少个字节（当前字节数）
   // uint addrs[NDIRECT+1]; // 这里要修改，变成NDIRECT+2，但其实总数是没变的
   uint addrs[NDIRECT+2];
 };

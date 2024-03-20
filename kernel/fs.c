@@ -611,7 +611,7 @@ writei(struct inode *ip, int user_src, uint64 src, uint off, uint n)
   uint tot, m;
   struct buf *bp;
 
-  if(off > ip->size || off + n < off)
+  if(off > ip->size || off + n < off)  // 写入时不能直接在大于当前字节数的地方写入，只能慢慢扩充
     return -1;
   if(off + n > MAXFILE*BSIZE)
     return -1;
@@ -684,7 +684,7 @@ dirlink(struct inode *dp, char *name, uint inum)
 
   // Check that name is not present.
   if((ip = dirlookup(dp, name, 0)) != 0){
-    iput(ip);
+    iput(ip);  // iget和iput是一起的，两者分别对ref字段增减，在dirlookup中调用了iget
     return -1;
   }
 
@@ -775,8 +775,8 @@ namex(char *path, int nameiparent, char *name)
     iunlockput(ip);
     ip = next;
   }
-  if(nameiparent){
-    iput(ip);
+  if(nameiparent){  // 为什么这里还有判断，应该在上面那个判断就返回了才对
+    iput(ip);  // 可能是上面那个出错了，返回不了，这里相当于释放吧
     return 0;
   }
   return ip;

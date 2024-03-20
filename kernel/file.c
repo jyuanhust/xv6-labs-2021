@@ -68,7 +68,7 @@ fileclose(struct file *f)
     release(&ftable.lock);
     return;
   }
-  ff = *f;
+  ff = *f;  // 拷贝一份
   f->ref = 0;
   f->type = FD_NONE;
   release(&ftable.lock);
