@@ -65,7 +65,54 @@ usertrap(void)
     intr_on();
 
     syscall();
-  } else if((which_dev = devintr()) != 0){
+  } 
+  else if (r_scause() == 0x000000000000000d || r_scause() ==  0x000000000000000f) {
+    // page fault
+    uint64 va = r_stval();  // 当前出错的虚拟地址
+    va = PGROUNDDOWN(va);
+    // printf("usertrap va: %p\n", va);
+    int vmaIndex = 0;
+    struct VMA vma;
+
+    for (;vmaIndex < NVMA; vmaIndex++) {
+      vma = p->vmas[vmaIndex];
+      if (vma.addr != 0 && vma.addr <= va && va < vma.addr + vma.length) {
+        // 发生缺页中断，并且该虚拟地址属于映射地址，才进行处理
+        char* pa = kalloc();
+        int perm = PTE_U;
+        // printf("%d", vma.length);
+        #include "fcntl.h"
+
+        if (vma.prot & PROT_READ) {
+          perm = perm | PTE_R;
+        }
+        if (vma.prot & PROT_WRITE) {
+          perm = perm | PTE_W;
+        }
+        if (vma.prot & PROT_EXEC) {
+          perm = perm | PTE_X;
+        }
+        uint off; // 读取文件的偏移量
+        off = va - vma.addr;
+        memset(pa, 0, PGSIZE);  // 这行不能缺省么？
+        filereadvma(vma.f, (uint64)pa, off, PGSIZE);
+
+        // printf("usertrap va: %p\n", va);
+        // printf("proc: %p\n", p);
+        // mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
+        mappages(p->pagetable, va, PGSIZE, (uint64)pa, perm);
+        // printf("=====succeed======\n");
+        break;
+      }
+    }
+
+    
+    if(vmaIndex == NVMA) {
+      p->killed = 1;  // 与最下面的处理要吻合，因为这里相当于代理出来的部分错误处理
+    }
+
+  }
+  else if((which_dev = devintr()) != 0){
     // ok
   } else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);

@@ -484,3 +484,185 @@ sys_pipe(void)
   }
   return 0;
 }
+
+uint64
+sys_mmap(void)
+{
+  uint64 addr;
+  int length, prot, flags, fd, offset;
+
+  if(argaddr(0, &addr) < 0 || 
+      argint(1, &length) < 0 || 
+      argint(2, &prot) < 0 || 
+      argint(3, &flags) < 0 || 
+      argint(4, &fd) < 0 || 
+      argint(5, &offset) < 0 )
+    return -1;
+  
+  
+
+  struct proc *p = myproc();
+
+  struct file *f;
+  if (fd < 0 || fd >= NOFILE || (f = p->ofile[fd]) == 0){
+    printf("sys_mmap: file failed\n");
+    return -1;
+  }
+    
+  
+  if((flags & MAP_SHARED) && (prot & PROT_WRITE) && !f->writable){
+    printf("sys_mmap: file failed\n");
+    return -1;
+  }
+
+  filedup(f);
+
+  int index;
+  for(index = 0; index < NVMA; index++){
+    if(p->vmas[index].addr == 0){
+
+
+      uint64 va = p->vaForVma - PGSIZE*(length-1);
+      p->vaForVma = va - PGSIZE;
+      // uint64 va = MAXVA ;
+      // 寻找空闲的地址空间，walk返回0就可以认为这个地址空间没有使用么？
+      // for(va = 0; va < MAXVA; va += PGSIZE){
+      //   printf("va: %p\n", va);
+      //   if(walkaddr(p->pagetable, va) == 0){
+          
+      //     break;
+      //   }
+      // }
+      // printf("proc: %p\n", p);
+
+      if(va == PGROUNDUP(p->sz)){
+        panic("sys_mmap");
+      }
+      
+      // 这里测试中的length是PGSIZE的整数倍
+
+      p->vmas[index].addr = va;
+      p->vmas[index].length = length;
+      p->vmas[index].prot = prot;
+      p->vmas[index].flags = flags;
+      p->vmas[index].fd = fd;
+      p->vmas[index].offset = offset;
+      p->vmas[index].f = f;
+
+      // printf("sys_mmap va: %p\n", va);
+      return va; // 可以返回了
+    }
+  }
+
+  if(index == NVMA)
+    return -1;
+
+  return 0; // 这里应该不会执行到
+}
+
+
+uint64
+sys_munmap(void)
+{
+  // printf("sys_munmap\n");
+  uint64 addr;
+  int length;
+
+  if (argaddr(0, &addr) < 0 || argint(1, &length) < 0)
+    return -1;
+
+  // addr 是虚拟地址
+  // 测试中传入的length都是PGSIZE的整数倍
+
+  struct proc *p = myproc();
+
+  int index;
+  struct VMA vma;
+  for(index = 0; index < NVMA; index++) {
+    vma = p->vmas[index];
+    if(vma.addr <= addr && addr < vma.addr + vma.length){
+      break;
+    }
+  }
+
+  if(index == NVMA)
+    return -1;
+  
+  // printf("sys_munmap: %p %d %p %d\n",vma.addr, vma.length, addr, length);
+
+  #include "fcntl.h"
+
+  if(vma.addr == addr){
+
+    if(vma.flags == MAP_SHARED){
+        filewritevma(vma.f, addr, 0, length);
+    }
+
+    // uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
+    // printf("uvmunmap\n");
+    // uvmunmap(p->pagetable, addr, length/PGSIZE, 1);
+
+    // walkaddr(pagetable_t pagetable, uint64 va);
+    for(int i = 0; i < length/PGSIZE; i++){
+      if(walkaddr(p->pagetable, addr + i * PGSIZE) != 0){
+        uvmunmap(p->pagetable, addr + i * PGSIZE, 1, 1);
+      }
+    }
+    
+
+    if(vma.length == length){
+      // 减少文件引用计数
+      fileclose(vma.f);
+
+      p->vmas[index].addr = 0;  // 取消掉这个vma，但是这块虚拟地址，好像要完了
+    }else if(vma.length > length) {
+      p->vmas[index].addr = addr + length;
+      p->vmas[index].length -= length;
+      // printf("hello\n");
+    }else{
+      return -1;
+    }
+  }else if(vma.addr < addr){
+    if(vma.flags == MAP_SHARED){
+        filewritevma(vma.f, addr, addr - vma.addr, length);
+    }
+
+    // uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
+    // uvmunmap(p->pagetable, addr, length/PGSIZE, 1);
+    for(int i = 0; i < length/PGSIZE; i++){
+      if(walkaddr(p->pagetable, addr + i * PGSIZE) != 0){
+        uvmunmap(p->pagetable, addr + i * PGSIZE, 1, 1);
+      }
+    }
+
+    if(addr - vma.addr + length == vma.length){
+      p->vmas[index].length = addr - vma.addr;
+    }else{
+      // 设置新的vma
+      int newIndex;
+      for(newIndex = 0; newIndex < NVMA; newIndex++){
+        if(p->vmas[newIndex].addr == 0){
+          break;
+        }
+      }
+
+      if(newIndex == NVMA)
+        panic("newIndex");
+
+      filedup(vma.f);
+      p->vmas[newIndex].length = p->vmas[index].length - length - (addr - vma.addr);
+      p->vmas[newIndex].f = vma.f;
+      p->vmas[newIndex].fd = vma.fd;
+      p->vmas[newIndex].flags = vma.flags;
+      p->vmas[newIndex].addr = addr + length;
+      p->vmas[newIndex].prot = vma.prot;
+      p->vmas[newIndex].offset = vma.offset;
+
+      p->vmas[index].length = addr - vma.addr;
+
+    }
+    return 0;
+  }
+
+  return 0;
+}

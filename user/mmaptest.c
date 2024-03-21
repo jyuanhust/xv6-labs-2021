@@ -195,6 +195,7 @@ mmap_test(void)
   printf("test not-mapped unmap\n");
   
   // unmap the rest of the mapped memory.
+  p[PGSIZE*2] = 'a';
   if (munmap(p+PGSIZE*2, PGSIZE) == -1)
     err("munmap (4)");
 

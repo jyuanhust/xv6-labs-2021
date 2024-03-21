@@ -141,6 +141,8 @@ found:
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
 
+  p->vaForVma = MAXVA - 100 * PGSIZE;
+
   return p;
 }
 
@@ -277,7 +279,7 @@ fork(void)
   struct proc *p = myproc();
 
   // Allocate process.
-  if((np = allocproc()) == 0){
+  if((np = allocproc()) == 0){  // 返回时np是上锁的
     return -1;
   }
 
@@ -304,6 +306,15 @@ fork(void)
   safestrcpy(np->name, p->name, sizeof(p->name));
 
   pid = np->pid;
+
+  // 拷贝vma
+  
+  for(int i = 0; i < NVMA; i++){
+    if(p->vmas[i].addr){
+      np->vmas[i] = p->vmas[i];
+      filedup(np->vmas[i].f);
+    }
+  }
 
   release(&np->lock);
 
@@ -350,6 +361,20 @@ exit(int status)
       struct file *f = p->ofile[fd];
       fileclose(f);
       p->ofile[fd] = 0;
+    }
+  }
+
+  // printf("exit\n");
+  for(int index = 0; index < NVMA; index++){
+    if(p->vmas[index].addr){
+      for (int i = 0; i < p->vmas[index].length / PGSIZE; i++) {
+        if (walkaddr(p->pagetable, p->vmas[index].addr + i * PGSIZE) != 0) {
+          // printf("%d uvmunmap %d\n", i, p->pid);
+          uvmunmap(p->pagetable, p->vmas[index].addr + i * PGSIZE, 1, 1);
+        }
+      }
+      fileclose(p->vmas[index].f);
+      p->vmas[index].addr = 0;
     }
   }
 
