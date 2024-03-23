@@ -32,20 +32,21 @@ ping(uint16 sport, uint16 dport, int attempts)
       exit(1);
     }
   }
-
+  // printf("hello 1\n");
   char ibuf[128];
-  int cc = read(fd, ibuf, sizeof(ibuf)-1);
+  int cc = read(fd, ibuf, sizeof(ibuf)-1);  // 这里存在等待
   if(cc < 0){
     fprintf(2, "ping: recv() failed\n");
     exit(1);
   }
-
+  // printf("hello 2\n");
   close(fd);
   ibuf[cc] = '\0';
   if(strcmp(ibuf, "this is the host!") != 0){
     fprintf(2, "ping didn't receive correct payload\n");
     exit(1);
   }
+  // printf("leave ping\n");
 }
 
 // Encode a DNS name
@@ -269,12 +270,15 @@ main(int argc, char *argv[])
   printf("OK\n");
   
   printf("testing single-process pings: ");
-  for (i = 0; i < 100; i++)
+  for (i = 0; i < 100; i++){
+    // printf("time: %d\n", i);
     ping(2000, dport, 1);
+  }
+    
   printf("OK\n");
   
   printf("testing multi-process pings: ");
-  for (i = 0; i < 10; i++){
+  for (i = 0; i < 10; i++){  // 10
     int pid = fork();
     if (pid == 0){
       ping(2000 + i + 1, dport, 1);

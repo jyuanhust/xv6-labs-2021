@@ -113,11 +113,14 @@ sockread(struct sock *si, uint64 addr, int n)
   struct proc *pr = myproc();
   struct mbuf *m;
   int len;
-
+  // printf("hello 1\n");
   acquire(&si->lock);
+  
   while (mbufq_empty(&si->rxq) && !pr->killed) {
     sleep(&si->rxq, &si->lock);
+    // printf("while");
   }
+  // printf("hello 2\n");
   if (pr->killed) {
     release(&si->lock);
     return -1;

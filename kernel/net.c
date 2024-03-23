@@ -19,24 +19,24 @@ static uint8 broadcast_mac[ETHADDR_LEN] = { 0xFF, 0XFF, 0XFF, 0XFF, 0XFF, 0XFF }
 // Returns 0 if less than the full requested length is available.
 char *
 mbufpull(struct mbuf *m, unsigned int len)
-{
+{ // 从buf的前面抽出len个字节
   char *tmp = m->head;
   if (m->len < len)
     return 0;
   m->len -= len;
   m->head += len;
-  return tmp;
+  return tmp;  // 返回buf有效起始地址
 }
 
 // Prepends data to the beginning of the buffer and returns a pointer to it.
 char *
 mbufpush(struct mbuf *m, unsigned int len)
-{
+{ // 在buf的前面插入len个字节
   m->head -= len;
   if (m->head < m->buf)
     panic("mbufpush");
   m->len += len;
-  return m->head;
+  return m->head;  // 返回buf有效起始地址，此时从m->head开始的len个字节尚未被有效赋值
 }
 
 // Appends data to the end of the buffer and returns a pointer to it.
@@ -47,7 +47,7 @@ mbufput(struct mbuf *m, unsigned int len)
   m->len += len;
   if (m->len > MBUF_SIZE)
     panic("mbufput");
-  return tmp;
+  return tmp;  // 返回延长的部分buf的起始地址
 }
 
 // Strips data from the end of the buffer and returns a pointer to it.
@@ -58,13 +58,13 @@ mbuftrim(struct mbuf *m, unsigned int len)
   if (len > m->len)
     return 0;
   m->len -= len;
-  return m->head + m->len;
+  return m->head + m->len;  // 返回去除的部分buf的起始地址
 }
 
 // Allocates a packet buffer.
 struct mbuf *
 mbufalloc(unsigned int headroom)
-{
+{ // 参数headroom表示buf前面空闲出多少字节
   struct mbuf *m;
  
   if (headroom > MBUF_SIZE)
@@ -151,8 +151,8 @@ in_cksum(const unsigned char *addr, int len)
   }
 
   /* add back carry outs from top 16 bits to low 16 bits */
-  sum = (sum & 0xffff) + (sum >> 16);
-  sum += (sum >> 16);
+  sum = (sum & 0xffff) + (sum >> 16);  // 将高16位和低16位进行相加
+  sum += (sum >> 16);  // 再次左移16位后，此时高16位必定为0。
   /* guaranteed now that the lower 16 bits of sum are correct */
 
   answer = ~sum; /* truncate to 16 bits */
@@ -173,7 +173,8 @@ net_tx_eth(struct mbuf *m, uint16 ethtype)
   memmove(ethhdr->dhost, broadcast_mac, ETHADDR_LEN);
   ethhdr->type = htons(ethtype);
   if (e1000_transmit(m)) {
-    mbuffree(m);
+    printf("free\n");
+    mbuffree(m);  // 没有发送成功，free掉
   }
 }
 
@@ -192,7 +193,7 @@ net_tx_ip(struct mbuf *m, uint8 proto, uint32 dip)
   iphdr->ip_dst = htonl(dip);
   iphdr->ip_len = htons(m->len);
   iphdr->ip_ttl = 100;
-  iphdr->ip_sum = in_cksum((unsigned char *)iphdr, sizeof(*iphdr));
+  iphdr->ip_sum = in_cksum((unsigned char *)iphdr, sizeof(*iphdr)); // 这里计算校验和仅对iphdr，而不是整个packet
 
   // now on to the ethernet layer
   net_tx_eth(m, ETHTYPE_IP);
@@ -223,12 +224,12 @@ net_tx_arp(uint16 op, uint8 dmac[ETHADDR_LEN], uint32 dip)
   struct mbuf *m;
   struct arp *arphdr;
 
-  m = mbufalloc(MBUF_DEFAULT_HEADROOM);
+  m = mbufalloc(MBUF_DEFAULT_HEADROOM);  // 自己分配了一个
   if (!m)
     return -1;
 
   // generic part of ARP header
-  arphdr = mbufputhdr(m, *arphdr);
+  arphdr = mbufputhdr(m, *arphdr);  // 这个是插入到尾部
   arphdr->hrd = htons(ARP_HRD_ETHER);
   arphdr->pro = htons(ETHTYPE_IP);
   arphdr->hln = ETHADDR_LEN;
@@ -254,7 +255,7 @@ net_rx_arp(struct mbuf *m)
   uint8 smac[ETHADDR_LEN];
   uint32 sip, tip;
 
-  arphdr = mbufpullhdr(m, *arphdr);
+  arphdr = mbufpullhdr(m, *arphdr); // 这里为什么是pull，上面的net_tx_arp使用的是put（插入到尾部），所以这里应该使用trim才对吧
   if (!arphdr)
     goto done;
 
@@ -275,7 +276,7 @@ net_rx_arp(struct mbuf *m)
   // handle the ARP request
   memmove(smac, arphdr->sha, ETHADDR_LEN); // sender's ethernet address
   sip = ntohl(arphdr->sip); // sender's IP address (qemu's slirp)
-  net_tx_arp(ARP_OP_REPLY, smac, sip);
+  net_tx_arp(ARP_OP_REPLY, smac, sip);  // 这里为什么要调用呢？
 
 done:
   mbuffree(m);
@@ -297,13 +298,13 @@ net_rx_udp(struct mbuf *m, uint16 len, struct ip *iphdr)
   // TODO: validate UDP checksum
 
   // validate lengths reported in headers
-  if (ntohs(udphdr->ulen) != len)
+  if (ntohs(udphdr->ulen) != len)  // len 是buf的字节数（包括udphdr的大小）
     goto fail;
-  len -= sizeof(*udphdr);
+  len -= sizeof(*udphdr);  // 现在len = m->len，那下面的还要两者相减干什么呢？
   if (len > m->len)
     goto fail;
   // minimum packet size could be larger than the payload
-  mbuftrim(m, m->len - len);
+  mbuftrim(m, m->len - len);  // m->len 在上面调用mbufpullhdr时就已经减去udphdr大小个字节了
 
   // parse the necessary fields
   sip = ntohl(iphdr->ip_src);
@@ -331,7 +332,7 @@ net_rx_ip(struct mbuf *m)
   if (iphdr->ip_vhl != ((4 << 4) | (20 >> 2)))
     goto fail;
   // validate IP checksum
-  if (in_cksum((unsigned char *)iphdr, sizeof(*iphdr)))
+  if (in_cksum((unsigned char *)iphdr, sizeof(*iphdr)))  // 这里为什么根据是否返回0来判断是否校验成功
     goto fail;
   // can't support fragmented IP packets
   if (htons(iphdr->ip_off) != 0)

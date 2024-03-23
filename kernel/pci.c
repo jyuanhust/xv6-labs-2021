@@ -37,7 +37,7 @@ pci_init()
       // bit 0 : I/O access enable
       // bit 1 : memory access enable
       // bit 2 : enable mastering
-      base[1] = 7;
+      base[1] = 7;  // 7=111，即将上面那三位全置为1
       __sync_synchronize();
 
       for(int i = 0; i < 6; i++){

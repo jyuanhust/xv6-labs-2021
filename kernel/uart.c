@@ -41,7 +41,7 @@
 // the transmit output buffer.
 struct spinlock uart_tx_lock;
 #define UART_TX_BUF_SIZE 32
-char uart_tx_buf[UART_TX_BUF_SIZE];
+char uart_tx_buf[UART_TX_BUF_SIZE];  // 待发送的字符缓冲区
 uint64 uart_tx_w; // write next to uart_tx_buf[uart_tx_w % UART_TX_BUF_SIZE]
 uint64 uart_tx_r; // read next from uart_tx_buf[uart_tx_r % UART_TX_BUF_SIZE]
 
@@ -115,7 +115,7 @@ uartputc(int c)
 void
 uartputc_sync(int c)
 {
-  push_off();
+  push_off();  // 关中断
 
   if(panicked){
     for(;;)
@@ -165,13 +165,13 @@ uartstart()
 int
 uartgetc(void)
 {
-  if(ReadReg(LSR) & 0x01){
+  if(ReadReg(LSR) & 0x01){  // LSR_RX_READY
     // input data is ready.
     return ReadReg(RHR);
   } else {
     return -1;
   }
-}
+}  // 只被下面的uartintr调用
 
 // handle a uart interrupt, raised because input has
 // arrived, or the uart is ready for more output, or
@@ -181,7 +181,7 @@ uartintr(void)
 {
   // read and process incoming characters.
   while(1){
-    int c = uartgetc();
+    int c = uartgetc();  // uartgetc 只在这个地方被调用
     if(c == -1)
       break;
     consoleintr(c);
@@ -192,3 +192,4 @@ uartintr(void)
   uartstart();
   release(&uart_tx_lock);
 }
+// uartintr 只被trap.c中调用一次

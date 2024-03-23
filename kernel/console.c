@@ -83,7 +83,7 @@ consoleread(int user_dst, uint64 dst, int n)
   int c;
   char cbuf;
 
-  target = n;
+  target = n;  // 此后n表示还需要读取多少字符
   acquire(&cons.lock);
   while(n > 0){
     // wait until interrupt handler has put some
@@ -99,7 +99,7 @@ consoleread(int user_dst, uint64 dst, int n)
     c = cons.buf[cons.r++ % INPUT_BUF];
 
     if(c == C('D')){  // end-of-file
-      if(n < target){
+      if(n < target){  // 当此时在之前已经读取到其他字符的时候，再读取到一个C('D')，将不读取出这个C('D')，留待下次读取。而下次将会只读取出来一个C('D')，因为直接break了，所以返回0字节。
         // Save ^D for next time, to make sure
         // caller gets a 0-byte result.
         cons.r--;
@@ -115,7 +115,7 @@ consoleread(int user_dst, uint64 dst, int n)
     dst++;
     --n;
 
-    if(c == '\n'){
+    if(c == '\n'){  // 换行符也同样读取
       // a whole line has arrived, return to
       // the user-level read().
       break;
@@ -123,7 +123,7 @@ consoleread(int user_dst, uint64 dst, int n)
   }
   release(&cons.lock);
 
-  return target - n;
+  return target - n;  // 返回读取的字符数
 }
 
 //
@@ -157,7 +157,7 @@ consoleintr(int c)
     break;
   default:
     if(c != 0 && cons.e-cons.r < INPUT_BUF){
-      c = (c == '\r') ? '\n' : c;
+      c = (c == '\r') ? '\n' : c;  // 换行符也同样记录的
 
       // echo back to the user.
       consputc(c);

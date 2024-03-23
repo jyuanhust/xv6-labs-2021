@@ -130,7 +130,7 @@ fileread(struct file *f, uint64 addr, int n)
   }
 #ifdef LAB_NET
   else if(f->type == FD_SOCK){
-    r = sockread(f->sock, addr, n);
+    r = sockread(f->sock, addr, n);  // 存在阻塞
   }
 #endif
   else {

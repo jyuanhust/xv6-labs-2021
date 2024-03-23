@@ -245,11 +245,11 @@ create(char *path, short type, short major, short minor)
   char name[DIRSIZ];
 
   if((dp = nameiparent(path, name)) == 0)
-    return 0;
+    return 0; // 父目录不存在，直接返回
 
   ilock(dp);
 
-  if((ip = dirlookup(dp, name, 0)) != 0){
+  if((ip = dirlookup(dp, name, 0)) != 0){  // 假如该名称的文件已经存在
     iunlockput(dp);
     ilock(ip);
     if(type == T_FILE && (ip->type == T_FILE || ip->type == T_DEVICE))
